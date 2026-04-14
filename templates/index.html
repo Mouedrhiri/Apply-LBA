@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Automatisation LBA — Multi-candidats</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f4f5f7; color: #1b1b35; min-height: 100vh; }
+
+    header {
+      background: linear-gradient(135deg, #000091 0%, #1212ff 100%);
+      color: #fff; padding: 18px 32px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+    }
+    header h1 { font-size: 1.35rem; font-weight: 700; }
+    header span.sub { font-size: .85rem; opacity: .8; margin-left: 12px; }
+
+    nav.tabs { display: flex; background: #fff; border-bottom: 2px solid #e5e7eb; padding: 0 24px; }
+    nav.tabs button {
+      padding: 13px 22px; border: none; background: transparent;
+      font-size: .95rem; font-weight: 500; cursor: pointer; color: #6b7280;
+      border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all .15s;
+    }
+    nav.tabs button.active { color: #000091; border-bottom-color: #000091; font-weight: 700; }
+    nav.tabs button:hover:not(.active) { color: #1b1b35; }
+
+    .tab-panel { display: none; padding: 28px 32px; }
+    .tab-panel.active { display: block; }
+
+    .card {
+      background: #fff; border-radius: 10px; padding: 22px 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08); margin-bottom: 20px;
+    }
+    .card h2 { font-size: 1rem; font-weight: 700; margin-bottom: 16px;
+               color: #000091; border-bottom: 1px solid #e5e7eb; padding-bottom: 10px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .form-row.single { grid-template-columns: 1fr; }
+    .form-row.triple { grid-template-columns: 1fr 1fr 1fr; }
+    label { display: block; font-size: .82rem; font-weight: 600; color: #374151; margin-bottom: 5px; }
+    input[type="text"], input[type="email"], input[type="tel"], input[type="number"],
+    textarea, select {
+      width: 100%; padding: 9px 12px; border: 1.5px solid #d1d5db; border-radius: 6px;
+      font-size: .93rem; color: #1b1b35; transition: border-color .15s; background: #fafafa;
+    }
+    input:focus, textarea:focus, select:focus {
+      outline: none; border-color: #000091; background: #fff;
+      box-shadow: 0 0 0 3px rgba(0,0,145,.09);
+    }
+    textarea { resize: vertical; min-height: 110px; }
+
+    .btn { padding: 11px 22px; border-radius: 8px; border: none; font-size: .95rem;
+           font-weight: 700; cursor: pointer; transition: all .15s; }
+    .btn-primary { background: #000091; color: #fff; }
+    .btn-primary:hover { background: #1212ff; }
+    .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+    .btn-danger  { background: #dc2626; color: #fff; }
+    .btn-danger:hover  { background: #b91c1c; }
+    .btn-success { background: #16a34a; color: #fff; }
+    .btn-success:hover { background: #15803d; }
+    .btn-secondary { background: #e5e7eb; color: #374151; }
+    .btn-secondary:hover { background: #d1d5db; }
+    .btn-warning { background: #f59e0b; color: #fff; }
+    .btn-warning:hover { background: #d97706; }
+    .btn-sm { padding: 7px 14px; font-size: .85rem; }
+
+    /* ── Candidate cards ── */
+    .candidate-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 20px; }
+    .candidate-card {
+      background: #fff; border-radius: 12px; padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.08); border-left: 5px solid #000091;
+      position: relative;
+    }
+    .candidate-card.running { border-left-color: #16a34a; }
+    .candidate-card.paused  { border-left-color: #f59e0b; }
+    .candidate-card.stopped { border-left-color: #6b7280; }
+    .cc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .cc-name { font-size: 1.1rem; font-weight: 700; color: #1b1b35; }
+    .cc-badge {
+      padding: 3px 12px; border-radius: 20px; font-size: .75rem; font-weight: 600;
+      text-transform: uppercase;
+    }
+    .cc-badge.running  { background: #dcfce7; color: #166534; }
+    .cc-badge.paused   { background: #fef3c7; color: #92400e; }
+    .cc-badge.stopped  { background: #f3f4f6; color: #6b7280; }
+    .cc-badge.stopping { background: #fef3c7; color: #92400e; }
+    .cc-info { font-size: .85rem; color: #6b7280; margin-bottom: 8px; }
+    .cc-stats { display: flex; gap: 16px; margin: 10px 0; font-size: .85rem; }
+    .cc-stats span { font-weight: 600; }
+    .cc-stats .sent { color: #16a34a; }
+    .cc-stats .skip { color: #d97706; }
+    .cc-stats .err  { color: #dc2626; }
+    .cc-current { font-size: .82rem; color: #374151; background: #eff6ff; padding: 6px 10px;
+                  border-radius: 6px; margin-bottom: 10px; }
+    .cc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    /* ── Job list in candidate form ── */
+    .job-list { display: flex; flex-direction: column; gap: 8px; }
+    .job-item {
+      display: flex; align-items: center; gap: 8px;
+      background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 8px 10px;
+    }
+    .job-item input { flex: 1; }
+    .job-item .rome-input { flex: 1.5; font-size: .8rem; color: #6b7280; }
+    .job-item button { background: #fee2e2; color: #dc2626; border: none; border-radius: 6px;
+                       padding: 4px 8px; cursor: pointer; font-size: .85rem; }
+    .btn-add-job {
+      margin-top: 8px; background: #eff6ff; color: #000091; border: 1.5px dashed #000091;
+      border-radius: 6px; padding: 7px; font-size: .85rem; font-weight: 600;
+      cursor: pointer; width: 100%;
+    }
+    .btn-add-job:hover { background: #dbeafe; }
+
+    /* ── Log area ── */
+    #log-container {
+      background: #0f172a; border-radius: 10px; padding: 14px;
+      height: 400px; overflow-y: auto; font-family: 'Consolas', 'Courier New', monospace;
+      font-size: .82rem; line-height: 1.55;
+    }
+    .log-line { white-space: pre-wrap; padding: 1px 0; }
+    .log-info    { color: #94a3b8; }
+    .log-success { color: #4ade80; }
+    .log-warning { color: #fbbf24; }
+    .log-error   { color: #f87171; }
+
+    /* ── Stats strip ── */
+    .stats-strip { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    .stat-box {
+      flex: 1; min-width: 120px; background: #fff; border-radius: 10px;
+      padding: 16px 20px; text-align: center;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+    }
+    .stat-box .val { font-size: 1.8rem; font-weight: 800; }
+    .stat-box .lbl { font-size: .78rem; color: #6b7280; font-weight: 500; margin-top: 2px; }
+    .stat-sent .val { color: #16a34a; }
+    .stat-skip .val { color: #d97706; }
+    .stat-err  .val { color: #dc2626; }
+    .stat-cand .val { color: #000091; }
+
+    /* ── History table ── */
+    .tbl-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th { text-align: left; padding: 10px 14px; background: #f3f4f6;
+         font-weight: 700; color: #374151; border-bottom: 2px solid #e5e7eb; }
+    td { padding: 9px 14px; border-bottom: 1px solid #f3f4f6; }
+    tr:hover td { background: #fafafa; }
+    .tag-sent { background: #dcfce7; color: #166534; padding: 2px 9px; border-radius: 20px;
+                font-size: .75rem; font-weight: 700; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+      z-index: 9990; align-items: center; justify-content: center;
+    }
+    .modal-overlay.show { display: flex; }
+    .modal {
+      background: #fff; border-radius: 14px; padding: 28px 32px;
+      max-width: 700px; width: 95%; max-height: 90vh; overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    }
+    .modal h2 { margin-bottom: 20px; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; background: #1b1b35; color: #fff;
+      padding: 13px 20px; border-radius: 9px; font-size: .9rem; font-weight: 500;
+      box-shadow: 0 4px 16px rgba(0,0,0,.3); opacity: 0; transition: opacity .3s;
+      z-index: 9999;
+    }
+    #toast.show { opacity: 1; }
+
+    .controls { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; align-items: center; }
+    .controls-separator { flex: 1; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>🤖 Automatisation LBA <span class="sub">Multi-candidats — Candidatures Spontanées</span></h1>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;">
+    <span id="global-count" style="font-size:.85rem;opacity:.8;">0 candidat(s)</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="active" onclick="showTab('candidates')">👥 Candidats</button>
+  <button onclick="showTab('auto')">▶️ Automatisation</button>
+  <button onclick="showTab('history')">📋 Historique</button>
+</nav>
+
+<!-- ═══ TAB 1 — CANDIDATS ═══ -->
+<div id="tab-candidates" class="tab-panel active">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+    <h2 style="color:#000091;font-size:1.1rem;">👥 Gestion des candidats</h2>
+    <button class="btn btn-primary" onclick="openAddCandidate()">+ Ajouter un candidat</button>
+  </div>
+  <div class="candidate-grid" id="candidate-grid">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<!-- ═══ TAB 2 — AUTOMATISATION ═══ -->
+<div id="tab-auto" class="tab-panel">
+
+  <div class="stats-strip">
+    <div class="stat-box stat-cand">
+      <div class="val" id="st-active">0</div>
+      <div class="lbl">👥 Actifs</div>
+    </div>
+    <div class="stat-box stat-sent">
+      <div class="val" id="st-sent">0</div>
+      <div class="lbl">✅ Envoyées</div>
+    </div>
+    <div class="stat-box stat-skip">
+      <div class="val" id="st-skip">0</div>
+      <div class="lbl">⏭️ Ignorées</div>
+    </div>
+    <div class="stat-box stat-err">
+      <div class="val" id="st-err">0</div>
+      <div class="lbl">❌ Erreurs</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="btn btn-success" onclick="startAll()">▶ Tout démarrer</button>
+    <button class="btn btn-danger" onclick="stopAll()">⏹ Tout arrêter</button>
+    <div class="controls-separator"></div>
+    <button class="btn btn-secondary" onclick="clearLogs()">🗑 Vider les logs</button>
+    <label style="font-size:.85rem;display:flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" id="autoscroll" checked style="accent-color:#4ade80;" />
+      Auto-scroll
+    </label>
+  </div>
+
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div style="padding:12px 16px;background:#1e293b;display:flex;align-items:center;justify-content:space-between;">
+      <span style="color:#94a3b8;font-size:.85rem;font-weight:600;">📟 Logs en temps réel (tous candidats)</span>
+      <select id="log-filter" onchange="filterLogs()" style="font-size:.8rem;padding:3px 8px;border-radius:4px;">
+        <option value="">Tous les candidats</option>
+      </select>
+    </div>
+    <div id="log-container">
+      <div class="log-line log-info">Prêt. Ajoutez des candidats puis cliquez sur ▶ Démarrer.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TAB 3 — HISTORIQUE ═══ -->
+<div id="tab-history" class="tab-panel">
+  <div class="card">
+    <h2>📋 Candidatures envoyées</h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <span id="hist-count" style="font-size:.9rem;color:#6b7280;">Chargement…</span>
+      <button class="btn btn-secondary btn-sm" onclick="loadHistory()">🔄 Rafraîchir</button>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Heure</th>
+            <th>Candidat</th>
+            <th>Entreprise</th>
+            <th>SIRET</th>
+            <th>Ville</th>
+            <th>Métier</th>
+            <th>Statut</th>
+          </tr>
+        </thead>
+        <tbody id="hist-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL — Ajouter/Modifier candidat ═══ -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h2 id="modal-title">➕ Ajouter un candidat</h2>
+
+    <div class="form-row">
+      <div>
+        <label>Nom</label>
+        <input type="text" id="m-lastname" placeholder="Dupont" />
+      </div>
+      <div>
+        <label>Prénom</label>
+        <input type="text" id="m-firstname" placeholder="Marie" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div>
+        <label>E-mail</label>
+        <input type="email" id="m-email" placeholder="marie@email.fr" />
+      </div>
+      <div>
+        <label>Téléphone</label>
+        <input type="tel" id="m-phone" placeholder="0612345678" />
+      </div>
+    </div>
+
+    <div style="margin-bottom: 14px;">
+      <label>Déposer un CV (PDF) — auto-extraction nom/email/tel</label>
+      <input type="file" id="m-cv-file" accept=".pdf" onchange="handleCvUpload(this)" />
+      <span id="m-cv-status" style="font-size:.82rem;color:#6b7280;"></span>
+    </div>
+    <div style="margin-bottom: 14px;">
+      <label>Chemin du CV</label>
+      <input type="text" id="m-cv" placeholder="Sera rempli automatiquement après dépôt" />
+    </div>
+
+    <div style="margin-bottom: 14px;">
+      <label>Message de motivation (template)</label>
+      <p style="font-size:.78rem;color:#6b7280;margin-bottom:6px;">
+        Variables : <code>{company}</code>, <code>{firstname}</code>, <code>{lastname}</code>
+      </p>
+      <textarea id="m-message" rows="6"></textarea>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label>Délai entre candidatures (s)</label>
+        <input type="number" id="m-delay" value="3" min="1" max="30" />
+      </div>
+      <div style="display:flex;align-items:flex-end;padding-bottom:2px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.9rem;">
+          <input type="checkbox" id="m-headless" style="accent-color:#000091;width:18px;height:18px;" />
+          Mode headless
+        </label>
+      </div>
+    </div>
+
+    <div style="margin-bottom: 14px;">
+      <label>🔍 Recherches métier</label>
+      <div class="job-list" id="m-job-list"></div>
+      <button class="btn-add-job" onclick="modalAddJob()">+ Ajouter un métier</button>
+    </div>
+
+    <input type="hidden" id="m-id" value="" />
+
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveCandidate()">💾 Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const CITIES = {{ cities_json | safe }};
+  let allCandidates = [];
+  let evtSource = null;
+  let allLogs = [];
+
+  // ── Tab ──
+  function showTab(name) {
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    const btns = document.querySelectorAll('nav.tabs button');
+    const idx = { candidates:0, auto:1, history:2 }[name];
+    btns[idx].classList.add('active');
+    if (name === 'history') loadHistory();
+    if (name === 'auto') startSSE();
+  }
+
+  function toast(msg, ms = 2800) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  // ── Candidate CRUD ──
+
+  async function loadCandidates() {
+    const res = await fetch('/api/candidates');
+    allCandidates = await res.json();
+    renderCandidateGrid();
+    renderLogFilter();
+    document.getElementById('global-count').textContent = allCandidates.length + ' candidat(s)';
+  }
+
+  function renderCandidateGrid() {
+    const grid = document.getElementById('candidate-grid');
+    grid.innerHTML = '';
+    if (!allCandidates.length) {
+      grid.innerHTML = '<div class="card" style="text-align:center;color:#6b7280;padding:40px;">Aucun candidat. Cliquez sur <b>+ Ajouter un candidat</b> pour commencer.</div>';
+      return;
+    }
+    allCandidates.forEach(c => {
+      const st = (c.stats && c.stats.status) || c.status || 'stopped';
+      const stats = c.stats || {};
+      const statusLabels = {running:'En cours',paused:'En pause',stopping:'Arrêt…',stopped:'Arrêté'};
+      const stLabel = statusLabels[st] || st;
+      const div = document.createElement('div');
+      div.className = 'candidate-card ' + st;
+      div.innerHTML = `
+        <div class="cc-header">
+          <span class="cc-name">${escHtml(c.firstname || '?')} ${escHtml(c.lastname || '?')}</span>
+          <span class="cc-badge ${st}">${stLabel}</span>
+        </div>
+        <div class="cc-info">
+          📧 ${escHtml(c.email || '—')} &nbsp; 📞 ${escHtml(c.phone || '—')}
+        </div>
+        <div class="cc-info">
+          🔍 ${(c.job_searches||[]).map(j => escHtml(j.name)).join(', ') || '—'}
+        </div>
+        ${stats.current_city ? `<div class="cc-current">🏙️ ${escHtml(stats.current_city)} → ${escHtml(stats.current_job||'')} → ${escHtml(stats.current_company||'')}</div>` : ''}
+        ${stats.paused_until ? `<div class="cc-current" style="background:#fef3c7;">⏸️ Pause jusqu'à ${escHtml(stats.paused_until.substring(0,16).replace('T',' '))}</div>` : ''}
+        <div class="cc-stats">
+          <span class="sent">✅ ${stats.sent_today||0}</span>
+          <span class="skip">⏭️ ${stats.skipped||0}</span>
+          <span class="err">❌ ${stats.errors||0}</span>
+        </div>
+        <div class="cc-actions">
+          ${st !== 'running' && st !== 'stopping' ?
+            `<button class="btn btn-success btn-sm" onclick="startCandidate('${c.id}')">▶ Démarrer</button>` :
+            `<button class="btn btn-danger btn-sm" onclick="stopCandidate('${c.id}')">⏹ Arrêter</button>`}
+          <button class="btn btn-secondary btn-sm" onclick="editCandidate('${c.id}')">✏️ Modifier</button>
+          <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;" onclick="deleteCandidate('${c.id}')">🗑</button>
+        </div>`;
+      grid.appendChild(div);
+    });
+  }
+
+  function renderLogFilter() {
+    const sel = document.getElementById('log-filter');
+    const val = sel.value;
+    sel.innerHTML = '<option value="">Tous les candidats</option>';
+    allCandidates.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = (c.firstname || '?') + ' ' + (c.lastname || '?');
+      sel.appendChild(opt);
+    });
+    sel.value = val;
+  }
+
+  // ── Modal ──
+
+  function openAddCandidate() {
+    document.getElementById('modal-title').textContent = '➕ Ajouter un candidat';
+    document.getElementById('m-id').value = '';
+    document.getElementById('m-lastname').value = '';
+    document.getElementById('m-firstname').value = '';
+    document.getElementById('m-email').value = '';
+    document.getElementById('m-phone').value = '';
+    document.getElementById('m-cv').value = '';
+    document.getElementById('m-cv-status').textContent = '';
+    document.getElementById('m-message').value =
+      "Bonjour,\n\nJe suis actuellement à la recherche d'une alternance. " +
+      "Après avoir découvert {company} sur La Bonne Alternance, " +
+      "votre entreprise m'a particulièrement intéressé " +
+      "et je souhaite vous adresser ma candidature spontanée.\n\n" +
+      "Cordialement,\n{firstname} {lastname}";
+    document.getElementById('m-delay').value = 3;
+    document.getElementById('m-headless').checked = false;
+    renderModalJobs([{ name: '', romes: '' }]);
+    document.getElementById('modal-overlay').classList.add('show');
+  }
+
+  function editCandidate(cid) {
+    const c = allCandidates.find(x => x.id === cid);
+    if (!c) return;
+    document.getElementById('modal-title').textContent = '✏️ Modifier ' + (c.firstname||'') + ' ' + (c.lastname||'');
+    document.getElementById('m-id').value = c.id;
+    document.getElementById('m-lastname').value = c.lastname || '';
+    document.getElementById('m-firstname').value = c.firstname || '';
+    document.getElementById('m-email').value = c.email || '';
+    document.getElementById('m-phone').value = c.phone || '';
+    document.getElementById('m-cv').value = c.cv_path || '';
+    document.getElementById('m-cv-status').textContent = '';
+    document.getElementById('m-message').value = c.message_template || '';
+    document.getElementById('m-delay').value = c.delay_between_applications || 3;
+    document.getElementById('m-headless').checked = c.headless || false;
+    renderModalJobs(c.job_searches || [{ name: '', romes: '' }]);
+    document.getElementById('modal-overlay').classList.add('show');
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('show');
+  }
+
+  function renderModalJobs(jobs) {
+    const list = document.getElementById('m-job-list');
+    list.innerHTML = '';
+    jobs.forEach((j, i) => {
+      const div = document.createElement('div');
+      div.className = 'job-item';
+      div.innerHTML = `
+        <input type="text" class="mj-name" value="${escHtml(j.name)}" placeholder="Nom du métier" />
+        <input type="text" class="mj-romes rome-input" value="${escHtml(j.romes)}" placeholder="Codes ROME" />
+        <button onclick="this.parentElement.remove()">✕</button>`;
+      list.appendChild(div);
+    });
+  }
+
+  function modalAddJob() {
+    const list = document.getElementById('m-job-list');
+    const div = document.createElement('div');
+    div.className = 'job-item';
+    div.innerHTML = `
+      <input type="text" class="mj-name" value="" placeholder="Nom du métier" />
+      <input type="text" class="mj-romes rome-input" value="" placeholder="Codes ROME" />
+      <button onclick="this.parentElement.remove()">✕</button>`;
+    list.appendChild(div);
+  }
+
+  function getModalJobs() {
+    return [...document.querySelectorAll('#m-job-list .job-item')].map(el => ({
+      name: el.querySelector('.mj-name').value.trim(),
+      romes: el.querySelector('.mj-romes').value.trim(),
+    })).filter(j => j.name);
+  }
+
+  async function handleCvUpload(input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const status = document.getElementById('m-cv-status');
+    status.textContent = '⏳ Upload en cours…';
+
+    const cid = document.getElementById('m-id').value || 'new_' + Date.now();
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('candidate_id', cid);
+
+    const res = await fetch('/api/upload/cv', { method: 'POST', body: fd });
+    let data = {};
+    try { data = await res.json(); } catch(_) {}
+    if (!res.ok) {
+      status.textContent = '❌ ' + (data.error || 'Erreur');
+      input.value = '';
+      return;
+    }
+
+    document.getElementById('m-cv').value = data.cv_path || '';
+    status.textContent = '✅ CV chargé : ' + (data.original_name || '');
+
+    // Auto-fill from extraction
+    const ext = data.extracted || {};
+    if (ext.lastname && !document.getElementById('m-lastname').value)
+      document.getElementById('m-lastname').value = ext.lastname;
+    if (ext.firstname && !document.getElementById('m-firstname').value)
+      document.getElementById('m-firstname').value = ext.firstname;
+    if (ext.email && !document.getElementById('m-email').value)
+      document.getElementById('m-email').value = ext.email;
+    if (ext.phone && !document.getElementById('m-phone').value)
+      document.getElementById('m-phone').value = ext.phone;
+
+    if (ext.lastname || ext.firstname || ext.email || ext.phone) {
+      toast('📄 Infos extraites du CV automatiquement !');
+    }
+    input.value = '';
+  }
+
+  async function saveCandidate() {
+    const cid = document.getElementById('m-id').value;
+    const data = {
+      id: cid,
+      lastname: document.getElementById('m-lastname').value.trim(),
+      firstname: document.getElementById('m-firstname').value.trim(),
+      email: document.getElementById('m-email').value.trim(),
+      phone: document.getElementById('m-phone').value.trim(),
+      cv_path: document.getElementById('m-cv').value.trim(),
+      message_template: document.getElementById('m-message').value,
+      delay_between_applications: parseInt(document.getElementById('m-delay').value) || 3,
+      headless: document.getElementById('m-headless').checked,
+      job_searches: getModalJobs(),
+    };
+
+    if (!data.firstname && !data.lastname) {
+      toast('⚠️ Nom ou prénom requis');
+      return;
+    }
+
+    let res;
+    if (cid) {
+      res = await fetch('/api/candidates/' + cid, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    } else {
+      res = await fetch('/api/candidates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    }
+    const result = await res.json();
+    if (result.error) { toast('❌ ' + result.error); return; }
+    closeModal();
+    toast('✅ Candidat enregistré');
+    loadCandidates();
+  }
+
+  async function deleteCandidate(cid) {
+    if (!confirm('Supprimer ce candidat ?')) return;
+    await fetch('/api/candidates/' + cid, { method: 'DELETE' });
+    toast('🗑 Candidat supprimé');
+    loadCandidates();
+  }
+
+  // ── Start / Stop ──
+
+  async function startCandidate(cid) {
+    const res = await fetch('/api/start/' + cid, { method: 'POST' });
+    const data = await res.json();
+    if (data.error) { toast('⚠️ ' + data.error); return; }
+    toast('▶ Démarré');
+    startSSE();
+    showTab('auto');
+  }
+
+  async function stopCandidate(cid) {
+    await fetch('/api/stop/' + cid, { method: 'POST' });
+    toast('⏹ Arrêt en cours…');
+  }
+
+  async function startAll() {
+    const res = await fetch('/api/start-all', { method: 'POST' });
+    const data = await res.json();
+    toast('▶ ' + (data.started || []).length + ' candidat(s) démarré(s)');
+    startSSE();
+  }
+
+  async function stopAll() {
+    await fetch('/api/stop-all', { method: 'POST' });
+    toast('⏹ Arrêt de tous en cours…');
+  }
+
+  // ── SSE Logs ──
+
+  function startSSE() {
+    if (evtSource && evtSource.readyState !== EventSource.CLOSED) return;
+    evtSource = new EventSource('/api/logs/stream');
+    evtSource.onmessage = e => {
+      try {
+        const d = JSON.parse(e.data);
+        if (d.heartbeat) return;
+        allLogs.push(d);
+        if (allLogs.length > 1000) allLogs = allLogs.slice(-800);
+        appendLogEntry(d);
+      } catch(_) {}
+    };
+  }
+
+  function appendLogEntry(entry) {
+    const filter = document.getElementById('log-filter').value;
+    if (filter && entry.candidate_id && entry.candidate_id !== filter) return;
+
+    const c = document.getElementById('log-container');
+    const div = document.createElement('div');
+    div.className = 'log-line log-' + (entry.level || 'info');
+    div.dataset.cid = entry.candidate_id || '';
+    div.textContent = `[${entry.time}] ${entry.message}`;
+    c.appendChild(div);
+    if (document.getElementById('autoscroll').checked) c.scrollTop = c.scrollHeight;
+    while (c.childElementCount > 600) c.removeChild(c.firstChild);
+  }
+
+  function filterLogs() {
+    const c = document.getElementById('log-container');
+    c.innerHTML = '';
+    const filter = document.getElementById('log-filter').value;
+    allLogs.forEach(entry => {
+      if (!filter || !entry.candidate_id || entry.candidate_id === filter) {
+        appendLogEntry(entry);
+      }
+    });
+  }
+
+  function clearLogs() {
+    document.getElementById('log-container').innerHTML = '';
+    allLogs = [];
+  }
+
+  // ── Poll status ──
+
+  async function pollStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const statuses = await res.json();
+
+      let totalSent = 0, totalSkip = 0, totalErr = 0, totalActive = 0;
+      for (const [cid, st] of Object.entries(statuses)) {
+        totalSent += st.sent_today || 0;
+        totalSkip += st.skipped || 0;
+        totalErr += st.errors || 0;
+        if (st.status === 'running' || st.status === 'paused') totalActive++;
+
+        // Update candidate in allCandidates
+        const c = allCandidates.find(x => x.id === cid);
+        if (c) {
+          c.stats = st;
+          c.status = st.status;
+        }
+      }
+
+      document.getElementById('st-active').textContent = totalActive;
+      document.getElementById('st-sent').textContent = totalSent;
+      document.getElementById('st-skip').textContent = totalSkip;
+      document.getElementById('st-err').textContent = totalErr;
+
+      renderCandidateGrid();
+    } catch(_) {}
+  }
+
+  // ── History ──
+
+  async function loadHistory() {
+    const res = await fetch('/api/sent');
+    const data = await res.json();
+    const tbody = document.getElementById('hist-body');
+    document.getElementById('hist-count').textContent = data.length + ' candidature(s)';
+    tbody.innerHTML = '';
+    [...data].reverse().forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escHtml(r.date||'')}</td>
+        <td>${escHtml(r.time||'')}</td>
+        <td>${escHtml(r.candidate_name||'')}</td>
+        <td>${escHtml(r.company||'')}</td>
+        <td style="font-size:.8rem;color:#6b7280;">${escHtml(r.siret||'')}</td>
+        <td>${escHtml(r.city||'')}</td>
+        <td style="font-size:.82rem;">${escHtml(r.job||'')}</td>
+        <td><span class="tag-sent">Envoyée</span></td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ── Init ──
+  loadCandidates();
+  pollStatus();
+  setInterval(pollStatus, 3000);
+  startSSE();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+uploads/
+*_backup.*
+candidates_state.json
+sent_applications.json
+config.json
